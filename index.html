@@ -545,7 +545,7 @@ function renderSlots(slots, posts){
       : `<div class="empty-slot">아직 글이 없어요</div>`;
     return `<div class="slot-card" data-slot="${slot.slot_number}">
       <div class="slot-head"><span><span class="num">${slot.slot_number}</span>${label}</span>${kickBtn}</div>
-      <div class="slot-posts">${postsHtml2}</div>
+      <div class="slot-posts">${postsHtml}</div>
     </div>`;
   }).join('');
 }
