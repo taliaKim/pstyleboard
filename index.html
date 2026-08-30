@@ -662,7 +662,7 @@ function clearSelectedFile(e){
   document.getElementById('file-clear-btn').classList.add('hidden');
 }
 
-const MAX_IMAGE_BYTES = 1024 * 1024; // 1MB
+const MAX_IMAGE_BYTES = 500 * 1024; // 500KB
 
 // 가로/세로 크기는 그대로 두고 화질(압축률)만 낮춰서 용량을 줄임
 async function compressImageIfNeeded(file){
