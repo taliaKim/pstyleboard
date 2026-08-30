@@ -107,6 +107,7 @@
   .post-item a.file-link{display:inline-block;margin-top:6px;color:var(--primary-dark);font-weight:600;font-size:12px;}
   .post-time{color:var(--muted);font-size:11px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;}
   .color-btn{background:none;border:none;cursor:pointer;flex-shrink:0;padding:0;font-size:13px;line-height:1;}
+  .del-btn{background:none;border:none;cursor:pointer;flex-shrink:0;padding:0;font-size:13px;line-height:1;}
   .color-palette{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;}
   .color-swatch{width:20px;height:20px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 0 1px var(--border);cursor:pointer;padding:0;}
   .empty-slot{color:var(--muted);font-size:12px;text-align:center;margin-top:20px;}
@@ -532,25 +533,26 @@ function renderSlots(slots, posts){
   const grid = document.getElementById('slots-grid');
   const isTeacher = currentUser.role==='teacher';
   grid.innerHTML = slots.map(slot=>{
-    const slotPosts = posts.filter(p=>p.slot_number===slot.slot_number);
-    const postsHtml = slotPosts.length
-      ? slotPosts.map(renderPostItem).join('')
-      : `<div class="empty-slot">아직 글이 없어요</div>`;
     const isTeacherSlot = slot.slot_number===0;
     const label = isTeacherSlot ? '👩‍🏫 선생님' : (slot.student_name ? escapeHtml(slot.student_name) : '(미입장)');
     const kickBtn = (isTeacher && !isTeacherSlot && slot.student_name)
       ? `<button class="kick-btn" title="강제 로그아웃" onclick="forceLogoutSlot(${slot.slot_number}, '${escapeHtml(slot.student_name).replace(/'/g,"\\'")}')">✕</button>`
       : '';
+    const canDeleteInSlot = isTeacher || (currentUser.role==='student' && currentUser.number===slot.slot_number);
+    const slotPosts = posts.filter(p=>p.slot_number===slot.slot_number);
+    const postsHtml = slotPosts.length
+      ? slotPosts.map(p=>renderPostItem(p, canDeleteInSlot)).join('')
+      : `<div class="empty-slot">아직 글이 없어요</div>`;
     return `<div class="slot-card" data-slot="${slot.slot_number}">
       <div class="slot-head"><span><span class="num">${slot.slot_number}</span>${label}</span>${kickBtn}</div>
-      <div class="slot-posts">${postsHtml}</div>
+      <div class="slot-posts">${postsHtml2}</div>
     </div>`;
   }).join('');
 }
 
 const POST_COLORS = ['#faf9ff','#fff4d6','#ffe3e3','#e3f6ff','#e5ffe8','#f3e3ff','#ffe8f3','#e8f0ff','#fff0e0','#e0fff5','#f0e8ff','#ffe0ec','#eaffea','#fff9c4'];
 
-function renderPostItem(p){
+function renderPostItem(p, canDelete){
   const time = new Date(p.created_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
   let fileHtml = '';
   if(p.file_url){
@@ -561,12 +563,18 @@ function renderPostItem(p){
     }
   }
   const bg = p.color || '#faf9ff';
+  const deleteBtn = canDelete
+    ? `<button class="del-btn" title="삭제" onclick="deletePost('${p.id}','${p.file_url ? p.file_url.split('/post-files/')[1] : ''}')">🗑</button>`
+    : '';
   return `<div class="post-item" style="background:${bg}">
     ${p.content ? `<div>${escapeHtml(p.content).replace(/\n/g,'<br>')}</div>` : ''}
     ${fileHtml}
     <div class="post-time">
       <span>${time}</span>
-      <button class="color-btn" title="색상 변경" onclick="togglePalette('${p.id}')">🎨</button>
+      <span style="display:flex;gap:6px;">
+        <button class="color-btn" title="색상 변경" onclick="togglePalette('${p.id}')">🎨</button>
+        ${deleteBtn}
+      </span>
     </div>
     <div class="color-palette hidden" id="palette-${p.id}">
       ${POST_COLORS.map(c=>`<button class="color-swatch" style="background:${c}" onclick="setPostColor('${p.id}','${c}')"></button>`).join('')}
@@ -583,6 +591,18 @@ async function setPostColor(postId, color){
   if(error){ toast('색상 변경 실패: '+error.message); return; }
   await loadBoardContent();
 }
+
+async function deletePost(postId, storagePath){
+  if(!confirm('이 게시물을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  if(storagePath){
+    try{ await sb.storage.from('post-files').remove([decodeURIComponent(storagePath)]); }catch(e){}
+  }
+  const { error } = await sb.from('posts').delete().eq('id', postId);
+  if(error){ toast('삭제 실패: '+error.message); return; }
+  toast('삭제되었습니다.');
+  await loadBoardContent();
+}
+
 
 function subscribeRealtime(){
   if(realtimeChannel){ sb.removeChannel(realtimeChannel); }
