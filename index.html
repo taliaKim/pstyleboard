@@ -55,6 +55,8 @@
   .btn:hover{background:var(--primary-dark);}
   .btn.secondary{background:#eef0ff;color:var(--primary-dark);}
   .btn.pink{background:var(--pink);color:#7a3355;}
+  .btn.danger{background:#fdeaf1;color:#c14b74;}
+  .btn.danger:hover{background:#f8c9db;}
   .btn.small{width:auto;padding:8px 14px;font-size:13px;border-radius:9px;}
   .err-msg{color:#e0507a;font-size:13px;margin-top:8px;text-align:center;min-height:16px;}
 
@@ -456,9 +458,30 @@ async function loadRecentBoards(){
       <div class="bactions">
         <button class="btn small secondary" onclick="copyText('${link}')">🔗 링크 복사</button>
         <button class="btn small" onclick="enterBoardByCode('${b.link_code}', false)">열기</button>
+        <button class="btn small danger" onclick="deleteBoard('${b.id}','${b.link_code}','${escapeHtml(b.name).replace(/'/g,"\\'")}')">🗑 삭제</button>
       </div>
     </div>`;
   }).join('');
+}
+
+async function deleteBoard(boardId, linkCode, boardName){
+  if(!confirm(`"${boardName}" 게시판을 삭제할까요?\n게시물과 첨부파일이 모두 영구 삭제되며 되돌릴 수 없습니다.`)) return;
+
+  // 스토리지에 업로드된 첨부파일 삭제
+  try{
+    const { data: files } = await sb.storage.from('post-files').list(boardId);
+    if(files && files.length){
+      const paths = files.map(f=>`${boardId}/${f.name}`);
+      await sb.storage.from('post-files').remove(paths);
+    }
+  }catch(e){ /* 파일이 없거나 실패해도 게시판 삭제는 진행 */ }
+
+  // boards row 삭제 → board_slots, posts는 on delete cascade로 함께 삭제됨
+  const { error } = await sb.from('boards').delete().eq('id', boardId);
+  if(error){ toast('삭제 실패: '+error.message); return; }
+
+  toast(`"${boardName}" 게시판이 삭제되었습니다.`);
+  await loadRecentBoards();
 }
 
 function goBack(){
@@ -477,6 +500,13 @@ async function enterBoardByCode(code, isStudentEntry){
   }
   currentBoard = board;
   sessionStorage.setItem('cb_board', JSON.stringify(board));
+
+  // 예전에 만든 게시판에는 0번(선생님) 슬롯이 없을 수 있어 없으면 추가
+  const { data: teacherSlot } = await sb.from('board_slots').select('id')
+    .eq('board_id', board.id).eq('slot_number', 0).maybeSingle();
+  if(!teacherSlot){
+    await sb.from('board_slots').insert({ board_id: board.id, slot_number: 0, student_name: '선생님' });
+  }
 
   // 학생이 처음 입장하면 해당 번호 슬롯에 이름 반영
   if(currentUser.role==='student'){
