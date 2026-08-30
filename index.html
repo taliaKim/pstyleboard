@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>우리반 게시판</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root{
     --primary:#8b9cf7;
@@ -164,7 +165,8 @@
   const CONFIG = {
     SUPABASE_URL: "https://nsqwaucpcqcnfmtvxyys.supabase.co",
     SUPABASE_ANON_KEY: "sb_publishable_ZISiqlxgo-Jo-ifFQpUcqQ_fVp5bChi",
-    GAS_EXPORT_URL: "https://script.google.com/macros/s/AKfycbzt5ZhDgWW92Y5fJ9RjdyZ3h8_xl_7twWoYCRaqLGmxsC0SPj8T5riwWG3qoiuV5uOa/exec",
+    GAS_EXPORT_URL: "https://script.google.com/macros/s/AKfycbycqLXGV8vyDHBkhhmexBeYj7J8yBKjKtkIEvFIH6i1riWUZ0bqprfdCz2PeSV0cGLa/exec",
+    DRIVE_FOLDER_ID: "1RxfmuDOSlH5WHzsb3bnnxlYzPyjzeqfD",
     TEACHER_ID: "pescety",
     TEACHER_PW: "1q2w3e"
   };
@@ -254,7 +256,9 @@
       <div class="board-actions">
         <button class="btn small secondary" onclick="copyBoardLink()">🔗 링크 복사</button>
         <button class="btn small secondary" id="add-slot-btn" onclick="addNewSlot()">➕ 게시물 추가</button>
+        <button class="btn small secondary" id="save-local-btn" onclick="saveToComputer()">💾 내 컴퓨터에 저장</button>
         <button class="btn small pink" id="export-btn" onclick="exportToDrive()">📤 구글 드라이브로 내보내기</button>
+        <button class="btn small secondary" id="drive-view-btn" onclick="openDriveFolder()">📁 구글 드라이브 보기</button>
       </div>
     </div>
     <div class="slots-grid" id="slots-grid"></div>
@@ -527,6 +531,8 @@ async function enterBoardByCode(code, isStudentEntry){
 
   document.getElementById('export-btn').classList.toggle('hidden', currentUser.role!=='teacher');
   document.getElementById('add-slot-btn').classList.toggle('hidden', currentUser.role!=='teacher');
+  document.getElementById('drive-view-btn').classList.toggle('hidden', currentUser.role!=='teacher');
+  document.getElementById('save-local-btn').classList.toggle('hidden', currentUser.role!=='teacher');
   document.getElementById('board-title').textContent = `📌 ${board.name}`;
   renderUserBadge();
   showScreen('screen-board');
@@ -808,6 +814,53 @@ function copyText(text){
     .catch(()=>toast('복사에 실패했습니다.'));
 }
 
+async function saveToComputer(){
+  toast('압축 파일 준비 중...');
+  const { data: posts, error } = await sb.from('posts').select('*').eq('board_id', currentBoard.id).order('slot_number');
+  if(error){ toast('불러오기 실패: '+error.message); return; }
+
+  const zip = new JSZip();
+  const dateStr = new Date().toISOString().slice(0,10);
+
+  for(const p of (posts||[])){
+    const slotLabel = `${p.slot_number}_${p.student_name || '무기명'}`;
+    const folder = zip.folder(slotLabel);
+
+    if(p.content){
+      folder.file(`글_${p.id}.txt`, p.content);
+    }
+    if(p.file_url){
+      try{
+        const resp = await fetch(p.file_url);
+        const blob = await resp.blob();
+        folder.file(p.file_name || `파일_${p.id}`, blob);
+      }catch(e){
+        folder.file(`파일다운로드실패_${p.id}.txt`, `파일 URL: ${p.file_url}\n오류: ${e}`);
+      }
+    }
+  }
+
+  try{
+    const zipBlob = await zip.generateAsync({ type:'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentBoard.name}_${dateStr}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('내 컴퓨터에 저장되었습니다!');
+  }catch(e){
+    toast('압축 파일 생성 실패: '+e);
+  }
+}
+
+function openDriveFolder(){
+  if(!CONFIG.DRIVE_FOLDER_ID){ toast('DRIVE_FOLDER_ID 설정이 필요합니다.'); return; }
+  window.open(`https://drive.google.com/drive/folders/${CONFIG.DRIVE_FOLDER_ID}`, '_blank');
+}
+
 async function exportToDrive(){
   if(!CONFIG.GAS_EXPORT_URL || CONFIG.GAS_EXPORT_URL.includes('YOUR_DEPLOY_ID')){
     toast('GAS_EXPORT_URL 설정이 필요합니다.'); return;
@@ -822,12 +875,12 @@ async function exportToDrive(){
     }))
   };
   try{
-    const res = await fetch(CONFIG.GAS_EXPORT_URL, {
-      method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload)
+    // 구글 앱스 스크립트 웹앱은 CORS 응답 헤더를 제공하지 않아 응답을 읽을 수 없으므로
+    // no-cors 모드로 요청만 보내고, 결과는 구글 드라이브에서 직접 확인해야 함
+    await fetch(CONFIG.GAS_EXPORT_URL, {
+      method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload)
     });
-    const result = await res.json();
-    if(result.ok){ toast('구글 드라이브 내보내기 완료!'); }
-    else{ toast('내보내기 실패: '+result.error); }
+    toast('내보내기 요청을 보냈습니다. 잠시 후 구글 드라이브 폴더를 확인해주세요.');
   }catch(e){ toast('내보내기 중 오류가 발생했습니다.'); }
 }
 
@@ -848,6 +901,8 @@ function escapeHtml(str){
         renderUserBadge();
         document.getElementById('export-btn').classList.remove('hidden');
         document.getElementById('add-slot-btn').classList.remove('hidden');
+        document.getElementById('drive-view-btn').classList.remove('hidden');
+        document.getElementById('save-local-btn').classList.remove('hidden');
         document.getElementById('board-title').textContent = `📌 ${currentBoard.name}`;
         showScreen('screen-board');
         loadBoardContent(); subscribeRealtime();
@@ -857,6 +912,8 @@ function escapeHtml(str){
       renderUserBadge();
       document.getElementById('export-btn').classList.add('hidden');
       document.getElementById('add-slot-btn').classList.add('hidden');
+      document.getElementById('drive-view-btn').classList.add('hidden');
+      document.getElementById('save-local-btn').classList.add('hidden');
       document.getElementById('board-title').textContent = `📌 ${currentBoard.name}`;
       showScreen('screen-board');
       loadBoardContent(); subscribeRealtime();
