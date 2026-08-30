@@ -100,6 +100,12 @@
   .slot-head{font-weight:800;color:var(--primary-dark);font-size:16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
   .slot-head .num{background:var(--primary);color:#fff;border-radius:8px;padding:2px 8px;font-size:13px;margin-right:6px;}
   .kick-btn{background:#fdeaf1;color:#c14b74;border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;flex-shrink:0;line-height:1;}
+  .edit-name-btn{background:none;border:none;cursor:pointer;font-size:12px;margin-left:4px;padding:0;vertical-align:middle;}
+  .add-post-btn{
+    margin-top:8px;flex-shrink:0;width:100%;padding:8px;border:1.5px dashed var(--border);border-radius:10px;
+    background:#f8f9ff;color:var(--primary-dark);font-weight:700;font-size:12.5px;cursor:pointer;
+  }
+  .add-post-btn:hover{background:#eef0ff;}
   .kick-btn:hover{background:#f8c9db;}
   .slot-posts{flex:1;overflow-y:auto;min-height:0;}
   .post-item{background:#faf9ff;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:16px;line-height:1.5;position:relative;overflow-wrap:break-word;word-break:break-word;}
@@ -537,20 +543,40 @@ function renderSlots(slots, posts){
   const isTeacher = currentUser.role==='teacher';
   grid.innerHTML = slots.map(slot=>{
     const isTeacherSlot = slot.slot_number===0;
-    const label = isTeacherSlot ? '👩‍🏫 선생님' : (slot.student_name ? escapeHtml(slot.student_name) : '(미입장)');
+    const nameText = isTeacherSlot ? '👩‍🏫 선생님' : (slot.student_name ? escapeHtml(slot.student_name) : '(미입장)');
+    const editNameBtn = (isTeacher && !isTeacherSlot)
+      ? `<button class="edit-name-btn" title="이름 수정" onclick="editSlotName(${slot.slot_number}, '${slot.student_name ? escapeHtml(slot.student_name).replace(/'/g,"\\'") : ''}')">✏️</button>`
+      : '';
+    const label = `${nameText}${editNameBtn}`;
     const kickBtn = (isTeacher && !isTeacherSlot && slot.student_name)
       ? `<button class="kick-btn" title="강제 로그아웃" onclick="forceLogoutSlot(${slot.slot_number}, '${escapeHtml(slot.student_name).replace(/'/g,"\\'")}')">✕</button>`
       : '';
     const canDeleteInSlot = isTeacher || (currentUser.role==='student' && currentUser.number===slot.slot_number);
+    const canAddInSlot = isTeacher || (currentUser.role==='student' && currentUser.number===slot.slot_number);
     const slotPosts = posts.filter(p=>p.slot_number===slot.slot_number);
     const postsHtml = slotPosts.length
       ? slotPosts.map(p=>renderPostItem(p, canDeleteInSlot)).join('')
       : `<div class="empty-slot">아직 글이 없어요</div>`;
+    const addBtn = canAddInSlot
+      ? `<button class="add-post-btn" onclick="openWriteModal(${slot.slot_number}, '${isTeacherSlot ? '선생님' : (slot.student_name ? escapeHtml(slot.student_name).replace(/'/g,"\\'") : '')}')">+ 새 글 추가</button>`
+      : '';
     return `<div class="slot-card" data-slot="${slot.slot_number}">
       <div class="slot-head"><span><span class="num">${slot.slot_number}</span>${label}</span>${kickBtn}</div>
       <div class="slot-posts">${postsHtml}</div>
+      ${addBtn}
     </div>`;
   }).join('');
+}
+
+async function editSlotName(slotNumber, currentName){
+  const newName = prompt(`${slotNumber}번 학생 이름을 입력하세요 (비워두면 이름이 지워집니다):`, currentName || '');
+  if(newName === null) return; // 취소
+  const trimmed = newName.trim();
+  const { error } = await sb.from('board_slots').update({ student_name: trimmed || null })
+    .eq('board_id', currentBoard.id).eq('slot_number', slotNumber);
+  if(error){ toast('이름 수정 실패: '+error.message); return; }
+  toast('이름이 수정되었습니다.');
+  await loadBoardContent();
 }
 
 const POST_COLORS = ['#faf9ff','#fff4d6','#ffe3e3','#e3f6ff','#e5ffe8','#f3e3ff','#ffe8f3','#e8f0ff','#fff0e0','#e0fff5','#f0e8ff','#ffe0ec','#eaffea','#fff9c4'];
@@ -639,7 +665,12 @@ function subscribeRealtime(){
 }
 
 /* ===================== 새 글쓰기 ===================== */
-function openWriteModal(){
+let writeTargetSlot = null;
+let writeTargetName = null;
+
+function openWriteModal(targetSlot, targetName){
+  writeTargetSlot = (targetSlot !== undefined && targetSlot !== null) ? targetSlot : null;
+  writeTargetName = targetName || null;
   document.getElementById('write-content').value='';
   document.getElementById('write-file').value='';
   document.getElementById('write-err').textContent='';
@@ -647,7 +678,10 @@ function openWriteModal(){
   document.getElementById('file-clear-btn').classList.add('hidden');
   document.getElementById('write-modal').classList.remove('hidden');
 }
-function closeWriteModal(){ document.getElementById('write-modal').classList.add('hidden'); }
+function closeWriteModal(){
+  document.getElementById('write-modal').classList.add('hidden');
+  writeTargetSlot = null; writeTargetName = null;
+}
 
 document.getElementById('write-file').addEventListener('change', function(){
   const f = this.files[0];
@@ -706,8 +740,10 @@ async function submitPost(){
   const errEl = document.getElementById('write-err');
   if(!content && !file){ errEl.textContent='내용이나 파일을 입력해주세요.'; return; }
 
-  const slotNumber = currentUser.role==='teacher' ? 0 : currentUser.number;
-  const studentName = currentUser.role==='teacher' ? '선생님' : currentUser.name;
+  const slotNumber = writeTargetSlot !== null ? writeTargetSlot : (currentUser.role==='teacher' ? 0 : currentUser.number);
+  const studentName = writeTargetSlot !== null
+    ? (writeTargetName || (slotNumber===0 ? '선생님' : null))
+    : (currentUser.role==='teacher' ? '선생님' : currentUser.name);
 
   let file_url=null, file_name=null, file_type=null;
   if(file){
