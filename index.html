@@ -102,7 +102,10 @@
   .kick-btn{background:#fdeaf1;color:#c14b74;border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;flex-shrink:0;line-height:1;}
   .kick-btn:hover{background:#f8c9db;}
   .slot-posts{flex:1;overflow-y:auto;min-height:0;}
-  .post-item{background:#faf9ff;border-radius:10px;padding:9px 10px;margin-bottom:8px;font-size:13px;line-height:1.4;position:relative;}
+  .post-item{background:#faf9ff;border-radius:10px;padding:9px 10px;margin-bottom:8px;font-size:13px;line-height:1.4;position:relative;overflow-wrap:break-word;word-break:break-word;}
+  .post-link{color:var(--primary-dark);text-decoration:underline;overflow-wrap:break-word;word-break:break-all;}
+  .yt-embed{position:relative;padding-bottom:56.25%;height:0;overflow:hidden;margin-top:8px;border-radius:8px;background:#000;}
+  .yt-embed iframe{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px;border:none;}
   .post-item img{max-width:100%;border-radius:8px;margin-top:6px;display:block;}
   .post-item a.file-link{display:inline-block;margin-top:6px;color:var(--primary-dark);font-weight:600;font-size:12px;}
   .post-time{color:var(--muted);font-size:11px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;gap:6px;}
@@ -256,7 +259,7 @@
 <div id="write-modal" class="modal-overlay hidden">
   <div class="modal-box">
     <h3>✏️ 새 글쓰기</h3>
-    <textarea id="write-content" placeholder="내용을 입력하세요..."></textarea>
+    <textarea id="write-content" placeholder="내용을 입력하세요... (인터넷 주소나 유튜브 링크를 붙여넣으면 자동으로 연결/재생됩니다)"></textarea>
     <div class="file-drop-row">
       <div class="file-drop" onclick="document.getElementById('write-file').click()" id="file-drop-label">📎 파일/사진 첨부 (선택)</div>
       <button type="button" class="file-clear-btn hidden" id="file-clear-btn" onclick="clearSelectedFile(event)">✕</button>
@@ -552,6 +555,23 @@ function renderSlots(slots, posts){
 
 const POST_COLORS = ['#faf9ff','#fff4d6','#ffe3e3','#e3f6ff','#e5ffe8','#f3e3ff','#ffe8f3','#e8f0ff','#fff0e0','#e0fff5','#f0e8ff','#ffe0ec','#eaffea','#fff9c4'];
 
+function linkifyContent(escapedText){
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  return escapedText.replace(urlRegex, url => {
+    // 문장부호가 URL 끝에 딸려오는 경우 분리
+    const trailingMatch = url.match(/[).,!?;:]+$/);
+    const trailing = trailingMatch ? trailingMatch[0] : '';
+    const cleanUrl = trailing ? url.slice(0, -trailing.length) : url;
+    return `<a class="post-link" href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>${trailing}`;
+  });
+}
+
+function extractYoutubeId(text){
+  if(!text) return null;
+  const match = text.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+  return match ? match[1] : null;
+}
+
 function renderPostItem(p, canDelete){
   const time = new Date(p.created_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
   let fileHtml = '';
@@ -562,12 +582,16 @@ function renderPostItem(p, canDelete){
       fileHtml = `<a class="file-link" href="${p.file_url}" target="_blank" download>📎 ${escapeHtml(p.file_name||'첨부파일')}</a>`;
     }
   }
+  const ytId = extractYoutubeId(p.content);
+  const ytHtml = ytId ? `<div class="yt-embed"><iframe src="https://www.youtube.com/embed/${ytId}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>` : '';
+  const contentHtml = p.content ? linkifyContent(escapeHtml(p.content)).replace(/\n/g,'<br>') : '';
   const bg = p.color || '#faf9ff';
   const deleteBtn = canDelete
     ? `<button class="del-btn" title="삭제" onclick="deletePost('${p.id}','${p.file_url ? p.file_url.split('/post-files/')[1] : ''}')">🗑</button>`
     : '';
   return `<div class="post-item" style="background:${bg}">
-    ${p.content ? `<div>${escapeHtml(p.content).replace(/\n/g,'<br>')}</div>` : ''}
+    ${contentHtml ? `<div>${contentHtml}</div>` : ''}
+    ${ytHtml}
     ${fileHtml}
     <div class="post-time">
       <span>${time}</span>
