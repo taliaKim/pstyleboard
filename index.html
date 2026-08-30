@@ -253,6 +253,7 @@
       <h2 id="board-title">게시판</h2>
       <div class="board-actions">
         <button class="btn small secondary" onclick="copyBoardLink()">🔗 링크 복사</button>
+        <button class="btn small secondary" id="add-slot-btn" onclick="addNewSlot()">➕ 게시물 추가</button>
         <button class="btn small pink" id="export-btn" onclick="exportToDrive()">📤 구글 드라이브로 내보내기</button>
       </div>
     </div>
@@ -525,6 +526,7 @@ async function enterBoardByCode(code, isStudentEntry){
   }
 
   document.getElementById('export-btn').classList.toggle('hidden', currentUser.role!=='teacher');
+  document.getElementById('add-slot-btn').classList.toggle('hidden', currentUser.role!=='teacher');
   document.getElementById('board-title').textContent = `📌 ${board.name}`;
   renderUserBadge();
   showScreen('screen-board');
@@ -576,6 +578,27 @@ async function editSlotName(slotNumber, currentName){
     .eq('board_id', currentBoard.id).eq('slot_number', slotNumber);
   if(error){ toast('이름 수정 실패: '+error.message); return; }
   toast('이름이 수정되었습니다.');
+  await loadBoardContent();
+}
+
+async function addNewSlot(){
+  const { data: maxRow, error: maxErr } = await sb.from('board_slots').select('slot_number')
+    .eq('board_id', currentBoard.id).order('slot_number', {ascending:false}).limit(1).maybeSingle();
+  if(maxErr){ toast('추가 실패: '+maxErr.message); return; }
+  const nextNumber = (maxRow ? maxRow.slot_number : 0) + 1;
+
+  const { error } = await sb.from('board_slots').insert({
+    board_id: currentBoard.id, slot_number: nextNumber, student_name: null
+  });
+  if(error){ toast('추가 실패: '+error.message); return; }
+
+  // total_slots 표시값도 함께 갱신
+  const newTotal = (currentBoard.total_slots || 0) + 1;
+  await sb.from('boards').update({ total_slots: newTotal }).eq('id', currentBoard.id);
+  currentBoard.total_slots = newTotal;
+  sessionStorage.setItem('cb_board', JSON.stringify(currentBoard));
+
+  toast(`${nextNumber}번 게시물이 추가되었습니다.`);
   await loadBoardContent();
 }
 
@@ -824,6 +847,7 @@ function escapeHtml(str){
         currentBoard = JSON.parse(savedBoard);
         renderUserBadge();
         document.getElementById('export-btn').classList.remove('hidden');
+        document.getElementById('add-slot-btn').classList.remove('hidden');
         document.getElementById('board-title').textContent = `📌 ${currentBoard.name}`;
         showScreen('screen-board');
         loadBoardContent(); subscribeRealtime();
@@ -832,6 +856,7 @@ function escapeHtml(str){
       currentBoard = JSON.parse(savedBoard);
       renderUserBadge();
       document.getElementById('export-btn').classList.add('hidden');
+      document.getElementById('add-slot-btn').classList.add('hidden');
       document.getElementById('board-title').textContent = `📌 ${currentBoard.name}`;
       showScreen('screen-board');
       loadBoardContent(); subscribeRealtime();
