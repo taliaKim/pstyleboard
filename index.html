@@ -173,7 +173,7 @@
   const CONFIG = {
     SUPABASE_URL: "https://nsqwaucpcqcnfmtvxyys.supabase.co",
     SUPABASE_ANON_KEY: "sb_publishable_ZISiqlxgo-Jo-ifFQpUcqQ_fVp5bChi",
-    GAS_EXPORT_URL: "http://script.google.com/macros/s/AKfycbyy8z82eZTo7icViT3j67rk-GuJoTpf6Q0ev4o9FY3FjO5gamdjhpRGcCFNtOoCHIB2/exec",
+    GAS_EXPORT_URL: "https://script.google.com/macros/s/AKfycbyy8z82eZTo7icViT3j67rk-GuJoTpf6Q0ev4o9FY3FjO5gamdjhpRGcCFNtOoCHIB2/exec",
     DRIVE_FOLDER_ID: "1RxfmuDOSlH5WHzsb3bnnxlYzPyjzeqfD",
     TEACHER_ID: "pescety",
     TEACHER_PW: "1q2w3e"
@@ -859,6 +859,10 @@ function copyText(text){
     .catch(()=>toast('복사에 실패했습니다.'));
 }
 
+function padSlotNumber(n){
+  return String(n).padStart(2,'0'); // 00,01,02... 순서로 정렬되도록 0채움
+}
+
 async function saveToComputer(){
   toast('압축 파일 준비 중...');
   const { data: posts, error } = await sb.from('posts').select('*').eq('board_id', currentBoard.id).order('slot_number');
@@ -866,21 +870,37 @@ async function saveToComputer(){
 
   const zip = new JSZip();
   const dateStr = new Date().toISOString().slice(0,10);
+  const usedNames = new Set();
+
+  function uniqueName(name){
+    if(!usedNames.has(name)){ usedNames.add(name); return name; }
+    const dot = name.lastIndexOf('.');
+    const base = dot > -1 ? name.slice(0, dot) : name;
+    const ext = dot > -1 ? name.slice(dot) : '';
+    let i = 2;
+    let candidate = `${base}_${i}${ext}`;
+    while(usedNames.has(candidate)){ i++; candidate = `${base}_${i}${ext}`; }
+    usedNames.add(candidate);
+    return candidate;
+  }
 
   for(const p of (posts||[])){
-    const slotLabel = `${p.slot_number}_${p.student_name || '무기명'}`;
-    const folder = zip.folder(slotLabel);
+    const namePart = p.student_name || (p.slot_number===0 ? '선생님' : '무기명');
+    const prefix = `${padSlotNumber(p.slot_number)}_${namePart}`;
 
     if(p.content){
-      folder.file(`글_${p.id}.txt`, p.content);
+      const fname = uniqueName(`${prefix}_글.txt`);
+      zip.file(fname, p.content);
     }
     if(p.file_url){
       try{
         const resp = await fetch(p.file_url);
         const blob = await resp.blob();
-        folder.file(p.file_name || `파일_${p.id}`, blob);
+        const fname = uniqueName(`${prefix}_${p.file_name || '파일'}`);
+        zip.file(fname, blob);
       }catch(e){
-        folder.file(`파일다운로드실패_${p.id}.txt`, `파일 URL: ${p.file_url}\n오류: ${e}`);
+        const fname = uniqueName(`${prefix}_파일다운로드실패.txt`);
+        zip.file(fname, `파일 URL: ${p.file_url}\n오류: ${e}`);
       }
     }
   }
