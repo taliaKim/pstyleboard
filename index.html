@@ -173,7 +173,7 @@
   const CONFIG = {
     SUPABASE_URL: "https://nsqwaucpcqcnfmtvxyys.supabase.co",
     SUPABASE_ANON_KEY: "sb_publishable_ZISiqlxgo-Jo-ifFQpUcqQ_fVp5bChi",
-    GAS_EXPORT_URL: "https://script.google.com/macros/s/AKfycbyezEZIENA3YCp3Jj-XY2DP3XcK1cJXk7P2PSnEg7Rjc3cG1xljf1LZhYKRau22pQmJ/exec",
+    GAS_EXPORT_URL: "https://http://script.google.com/macros/s/AKfycbyy8z82eZTo7icViT3j67rk-GuJoTpf6Q0ev4o9FY3FjO5gamdjhpRGcCFNtOoCHIB2/exec",
     DRIVE_FOLDER_ID: "1RxfmuDOSlH5WHzsb3bnnxlYzPyjzeqfD",
     TEACHER_ID: "pescety",
     TEACHER_PW: "1q2w3e"
@@ -916,7 +916,7 @@ async function exportToDrive(){
     boardName: currentBoard.name,
     posts: (posts||[]).map(p=>({
       slotNumber: p.slot_number, studentName: p.student_name, content: p.content,
-      fileUrl: p.file_url, fileName: p.file_name, createdAt: p.created_at
+      fileUrl: p.file_url, fileName: p.file_name, fileType: p.file_type, createdAt: p.created_at
     }))
   };
   try{
