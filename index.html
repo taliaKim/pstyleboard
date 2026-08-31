@@ -99,6 +99,10 @@
     display:flex;flex-direction:column;min-height:320px;overflow:hidden;
   }
   .slot-card[data-slot="0"]{ grid-row: span 2; }
+  .slot-card-teacher .slot-head{ color:#fff; }
+  .slot-card-teacher .slot-head .num{ background:rgba(255,255,255,0.35); color:#fff; }
+  .slot-card-teacher .empty-slot{ color:rgba(255,255,255,0.75); }
+  .slot-card-teacher .edit-name-btn{ filter:brightness(0) invert(1); }
   .slot-head{font-weight:800;color:var(--primary-dark);font-size:16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
   .slot-head .num{background:var(--primary);color:#fff;border-radius:8px;padding:2px 8px;font-size:13px;margin-right:6px;}
   .kick-btn{background:#fdeaf1;color:#c14b74;border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;flex-shrink:0;line-height:1;}
@@ -550,6 +554,9 @@ async function loadBoardContent(){
   renderSlots(slots||[], posts||[]);
 }
 
+const SLOT_CARD_COLORS = ['#eef2ff','#fef6e4','#ffe8ec','#e8f9ff','#eafbe8','#f6ecff','#fff0f6','#e9f3ff','#fff7e0','#e6fff5'];
+const TEACHER_CARD_COLOR = '#8b9cf7';
+
 function renderSlots(slots, posts){
   const grid = document.getElementById('slots-grid');
   const isTeacher = currentUser.role==='teacher';
@@ -575,7 +582,9 @@ function renderSlots(slots, posts){
     const addBtn = canAddInSlot
       ? `<button class="add-post-btn" onclick="openWriteModal(${slot.slot_number}, '${isTeacherSlot ? '선생님' : (slot.student_name ? escapeHtml(slot.student_name).replace(/'/g,"\\'") : '')}')">+ 새 글 추가</button>`
       : '';
-    return `<div class="slot-card" data-slot="${slot.slot_number}">
+    const cardColor = isTeacherSlot ? TEACHER_CARD_COLOR : SLOT_CARD_COLORS[slot.slot_number % SLOT_CARD_COLORS.length];
+    const cardClass = isTeacherSlot ? 'slot-card slot-card-teacher' : 'slot-card';
+    return `<div class="${cardClass}" data-slot="${slot.slot_number}" style="background:${cardColor}">
       <div class="slot-head"><span><span class="num">${slot.slot_number}</span>${label}</span><span style="display:flex;gap:4px;">${kickBtn}${slotDelBtn}</span></div>
       <div class="slot-posts">${postsHtml}</div>
       ${addBtn}
