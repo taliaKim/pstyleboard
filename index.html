@@ -6,6 +6,7 @@
 <title>우리반 게시판</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --primary:#8b9cf7;
@@ -173,7 +174,7 @@
   const CONFIG = {
     SUPABASE_URL: "https://nsqwaucpcqcnfmtvxyys.supabase.co",
     SUPABASE_ANON_KEY: "sb_publishable_ZISiqlxgo-Jo-ifFQpUcqQ_fVp5bChi",
-    GAS_EXPORT_URL: "https://script.google.com/macros/s/AKfycbxXZ_BeHbZfWXt9OgjsIoxhg05Ztcuxge979ElK5Omrwq8jBXt-qtc5rPUk07628TQp/exec",
+    GAS_EXPORT_URL: "https://script.google.com/macros/s/AKfycbxo6_p4A6VJ_i0mAhR-VupMbBEmylkOuBzv8Nd2teeCAxSdf6Pv-snMOsziZBSqFDnF/exec",
     DRIVE_FOLDER_ID: "1RxfmuDOSlH5WHzsb3bnnxlYzPyjzeqfD",
     TEACHER_ID: "pescety",
     TEACHER_PW: "1q2w3e"
@@ -871,6 +872,7 @@ async function saveToComputer(){
   const zip = new JSZip();
   const dateStr = new Date().toISOString().slice(0,10);
   const usedNames = new Set();
+  const excelRows = [['번호','이름','내용','작성일시']];
 
   function uniqueName(name){
     if(!usedNames.has(name)){ usedNames.add(name); return name; }
@@ -887,22 +889,35 @@ async function saveToComputer(){
   for(const p of (posts||[])){
     const namePart = p.student_name || (p.slot_number===0 ? '선생님' : '무기명');
     const prefix = `${padSlotNumber(p.slot_number)}_${namePart}`;
+    let fileNote = '';
 
-    if(p.content){
-      const fname = uniqueName(`${prefix}_글.txt`);
-      zip.file(fname, p.content);
-    }
     if(p.file_url){
       try{
         const resp = await fetch(p.file_url);
         const blob = await resp.blob();
         const fname = uniqueName(`${prefix}_${p.file_name || '파일'}`);
         zip.file(fname, blob);
+        fileNote = `[첨부: ${p.file_name || '파일'}]`;
       }catch(e){
-        const fname = uniqueName(`${prefix}_파일다운로드실패.txt`);
-        zip.file(fname, `파일 URL: ${p.file_url}\n오류: ${e}`);
+        fileNote = `[파일 다운로드 실패: ${p.file_url}]`;
       }
     }
+
+    const contentForExcel = p.content ? (fileNote ? `${p.content} ${fileNote}` : p.content) : (fileNote || '');
+    const timeStr = p.created_at ? new Date(p.created_at).toLocaleString('ko-KR') : '';
+    excelRows.push([p.slot_number, namePart, contentForExcel, timeStr]);
+  }
+
+  // 텍스트 내용을 엑셀 파일 하나로 정리해서 zip에 포함
+  try{
+    const ws = XLSX.utils.aoa_to_sheet(excelRows);
+    ws['!cols'] = [{wch:6},{wch:14},{wch:50},{wch:20}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '게시물 정리');
+    const excelArrayBuffer = XLSX.write(wb, { type:'array', bookType:'xlsx' });
+    zip.file(`${currentBoard.name}_게시물정리.xlsx`, excelArrayBuffer);
+  }catch(e){
+    toast('엑셀 파일 생성 중 오류가 발생했습니다.');
   }
 
   try{
