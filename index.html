@@ -101,6 +101,8 @@
   .slot-head{font-weight:800;color:var(--primary-dark);font-size:16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
   .slot-head .num{background:var(--primary);color:#fff;border-radius:8px;padding:2px 8px;font-size:13px;margin-right:6px;}
   .kick-btn{background:#fdeaf1;color:#c14b74;border:none;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;flex-shrink:0;line-height:1;}
+  .slot-del-btn{background:#fdeaf1;color:#c14b74;border:none;border-radius:50%;width:22px;height:22px;font-size:11px;cursor:pointer;flex-shrink:0;line-height:1;}
+  .slot-del-btn:hover{background:#f8c9db;}
   .edit-name-btn{background:none;border:none;cursor:pointer;font-size:12px;margin-left:4px;padding:0;vertical-align:middle;}
   .add-post-btn{
     margin-top:8px;flex-shrink:0;width:100%;padding:8px;border:1.5px dashed var(--border);border-radius:10px;
@@ -559,6 +561,9 @@ function renderSlots(slots, posts){
     const kickBtn = (isTeacher && !isTeacherSlot && slot.student_name)
       ? `<button class="kick-btn" title="강제 로그아웃" onclick="forceLogoutSlot(${slot.slot_number}, '${escapeHtml(slot.student_name).replace(/'/g,"\\'")}')">✕</button>`
       : '';
+    const slotDelBtn = (isTeacher && !isTeacherSlot)
+      ? `<button class="slot-del-btn" title="이 번호 칸 전체 삭제" onclick="deleteSlot(${slot.slot_number})">🗑</button>`
+      : '';
     const canDeleteInSlot = isTeacher || (currentUser.role==='student' && currentUser.number===slot.slot_number);
     const canAddInSlot = isTeacher || (currentUser.role==='student' && currentUser.number===slot.slot_number);
     const slotPosts = posts.filter(p=>p.slot_number===slot.slot_number);
@@ -569,7 +574,7 @@ function renderSlots(slots, posts){
       ? `<button class="add-post-btn" onclick="openWriteModal(${slot.slot_number}, '${isTeacherSlot ? '선생님' : (slot.student_name ? escapeHtml(slot.student_name).replace(/'/g,"\\'") : '')}')">+ 새 글 추가</button>`
       : '';
     return `<div class="slot-card" data-slot="${slot.slot_number}">
-      <div class="slot-head"><span><span class="num">${slot.slot_number}</span>${label}</span>${kickBtn}</div>
+      <div class="slot-head"><span><span class="num">${slot.slot_number}</span>${label}</span><span style="display:flex;gap:4px;">${kickBtn}${slotDelBtn}</span></div>
       <div class="slot-posts">${postsHtml}</div>
       ${addBtn}
     </div>`;
@@ -605,6 +610,35 @@ async function addNewSlot(){
   sessionStorage.setItem('cb_board', JSON.stringify(currentBoard));
 
   toast(`${nextNumber}번 게시물이 추가되었습니다.`);
+  await loadBoardContent();
+}
+
+async function deleteSlot(slotNumber){
+  if(!confirm(`${slotNumber}번 칸을 통째로 삭제할까요?\n그 안의 모든 글과 첨부파일이 함께 영구 삭제되며 되돌릴 수 없습니다.`)) return;
+
+  // 이 슬롯의 게시물에 첨부된 파일들을 스토리지에서 먼저 삭제
+  try{
+    const { data: slotPosts } = await sb.from('posts').select('file_url')
+      .eq('board_id', currentBoard.id).eq('slot_number', slotNumber);
+    const paths = (slotPosts||[])
+      .filter(p=>p.file_url)
+      .map(p=>p.file_url.split('/post-files/')[1])
+      .filter(Boolean)
+      .map(p=>decodeURIComponent(p));
+    if(paths.length){ await sb.storage.from('post-files').remove(paths); }
+  }catch(e){ /* 파일 삭제 실패해도 슬롯 삭제는 진행 */ }
+
+  // board_slots 행 삭제 → posts는 on delete cascade로 함께 삭제됨
+  const { error } = await sb.from('board_slots').delete()
+    .eq('board_id', currentBoard.id).eq('slot_number', slotNumber);
+  if(error){ toast('삭제 실패: '+error.message); return; }
+
+  const newTotal = Math.max((currentBoard.total_slots || 1) - 1, 0);
+  await sb.from('boards').update({ total_slots: newTotal }).eq('id', currentBoard.id);
+  currentBoard.total_slots = newTotal;
+  sessionStorage.setItem('cb_board', JSON.stringify(currentBoard));
+
+  toast(`${slotNumber}번 칸이 삭제되었습니다.`);
   await loadBoardContent();
 }
 
