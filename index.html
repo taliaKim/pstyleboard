@@ -59,6 +59,7 @@
   .btn.pink{background:var(--pink);color:#7a3355;}
   .btn.danger{background:#fdeaf1;color:#c14b74;}
   .btn.danger:hover{background:#f8c9db;}
+  .board-size-badge{background:#eef0ff;color:var(--primary-dark);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;}
   .btn.small{width:auto;padding:8px 14px;font-size:13px;border-radius:9px;}
   .err-msg{color:#e0507a;font-size:13px;margin-top:8px;text-align:center;min-height:16px;}
 
@@ -266,6 +267,7 @@
         <button class="btn small secondary" onclick="copyBoardLink()">🔗 링크 복사</button>
         <button class="btn small secondary" id="add-slot-btn" onclick="addNewSlot()">➕ 게시물 추가</button>
         <button class="btn small secondary" id="save-local-btn" onclick="saveToComputer()">💾 내 컴퓨터에 저장</button>
+        <span id="board-size-display" class="board-size-badge hidden">용량 계산 중...</span>
         <button class="btn small pink" id="export-btn" onclick="exportToDrive()">📤 구글 드라이브로 내보내기</button>
         <button class="btn small secondary" id="drive-view-btn" onclick="openDriveFolder()">📁 구글 드라이브 보기</button>
       </div>
@@ -477,7 +479,7 @@ async function loadRecentBoards(){
     return `<div class="board-item">
       <div>
         <div class="binfo">${escapeHtml(b.name)}</div>
-        <div class="bmeta">학생 ${b.student_count}명 · 총 ${b.total_slots}칸 · ${date} 생성 · 코드: ${b.link_code}</div>
+        <div class="bmeta">학생 ${b.student_count}명 · 총 ${b.total_slots}칸 · ${date} 생성 · 코드: ${b.link_code} · 용량: <span id="board-size-list-${b.id}">계산 중...</span></div>
       </div>
       <div class="bactions">
         <button class="btn small secondary" onclick="copyText('${link}')">🔗 링크 복사</button>
@@ -486,6 +488,39 @@ async function loadRecentBoards(){
       </div>
     </div>`;
   }).join('');
+
+  // 목록이 그려진 뒤, 각 게시판 용량을 백그라운드에서 계산해서 채워넣음 (느려도 목록 표시는 먼저 됨)
+  data.forEach(async(b)=>{
+    const bytes = await getBoardStorageSize(b.id);
+    const el = document.getElementById(`board-size-list-${b.id}`);
+    if(el) el.textContent = formatBytes(bytes);
+  });
+}
+
+function formatBytes(bytes){
+  if(!bytes || bytes < 0) return '0 B';
+  if(bytes < 1024) return `${bytes} B`;
+  if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
+  return `${(bytes/1024/1024).toFixed(2)} MB`;
+}
+
+async function getBoardStorageSize(boardId){
+  let totalBytes = 0;
+  try{
+    const { data: posts } = await sb.from('posts').select('content').eq('board_id', boardId);
+    (posts||[]).forEach(p=>{
+      if(p.content) totalBytes += new TextEncoder().encode(p.content).length;
+    });
+  }catch(e){ /* 텍스트 용량 계산 실패해도 계속 진행 */ }
+
+  try{
+    const { data: files } = await sb.storage.from('post-files').list(boardId, { limit: 1000 });
+    (files||[]).forEach(f=>{
+      if(f.metadata && f.metadata.size) totalBytes += f.metadata.size;
+    });
+  }catch(e){ /* 파일 용량 계산 실패해도 계속 진행 */ }
+
+  return totalBytes;
 }
 
 async function deleteBoard(boardId, linkCode, boardName){
@@ -542,11 +577,21 @@ async function enterBoardByCode(code, isStudentEntry){
   document.getElementById('add-slot-btn').classList.toggle('hidden', currentUser.role!=='teacher');
   document.getElementById('drive-view-btn').classList.toggle('hidden', currentUser.role!=='teacher');
   document.getElementById('save-local-btn').classList.toggle('hidden', currentUser.role!=='teacher');
+  document.getElementById('board-size-display').classList.toggle('hidden', currentUser.role!=='teacher');
   document.getElementById('board-title').textContent = `📌 ${board.name}`;
   renderUserBadge();
   showScreen('screen-board');
   await loadBoardContent();
   subscribeRealtime();
+  if(currentUser.role==='teacher') updateBoardSizeDisplay();
+}
+
+async function updateBoardSizeDisplay(){
+  const el = document.getElementById('board-size-display');
+  if(!el || !currentBoard) return;
+  el.textContent = '용량 계산 중...';
+  const bytes = await getBoardStorageSize(currentBoard.id);
+  el.textContent = `📦 게시판 용량: ${formatBytes(bytes)}`;
 }
 
 async function loadBoardContent(){
@@ -983,9 +1028,11 @@ function escapeHtml(str){
         document.getElementById('add-slot-btn').classList.remove('hidden');
         document.getElementById('drive-view-btn').classList.remove('hidden');
         document.getElementById('save-local-btn').classList.remove('hidden');
+        document.getElementById('board-size-display').classList.remove('hidden');
         document.getElementById('board-title').textContent = `📌 ${currentBoard.name}`;
         showScreen('screen-board');
         loadBoardContent(); subscribeRealtime();
+        updateBoardSizeDisplay();
       } else { enterDashboard(); }
     } else if(savedBoard){
       currentBoard = JSON.parse(savedBoard);
@@ -994,6 +1041,7 @@ function escapeHtml(str){
       document.getElementById('add-slot-btn').classList.add('hidden');
       document.getElementById('drive-view-btn').classList.add('hidden');
       document.getElementById('save-local-btn').classList.add('hidden');
+      document.getElementById('board-size-display').classList.add('hidden');
       document.getElementById('board-title').textContent = `📌 ${currentBoard.name}`;
       showScreen('screen-board');
       loadBoardContent(); subscribeRealtime();
