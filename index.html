@@ -253,23 +253,21 @@
 
 <!-- 게시판 화면 (학생/교사 공통) -->
 <div id="screen-board" class="screen hidden">
-  <header class="topbar">
-    <div class="user-info" id="board-user-info"></div>
-    <div class="topbar-actions">
-      <button class="btn small secondary" onclick="goBack()">← 목록</button>
-      <button class="logout-btn" onclick="logout()">로그아웃</button>
-    </div>
-  </header>
   <div class="board-screen-wrap">
     <div class="board-title-row">
-      <h2 id="board-title">게시판</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <h2 id="board-title">게시판</h2>
+        <div class="user-info" id="board-user-info"></div>
+      </div>
       <div class="board-actions">
+        <button class="btn small secondary" onclick="goBack()">← 목록</button>
         <button class="btn small secondary" onclick="copyBoardLink()">🔗 링크 복사</button>
         <button class="btn small secondary" id="add-slot-btn" onclick="addNewSlot()">➕ 게시물 추가</button>
         <button class="btn small secondary" id="save-local-btn" onclick="saveToComputer()">💾 내 컴퓨터에 저장</button>
         <span id="board-size-display" class="board-size-badge hidden">용량 계산 중...</span>
         <button class="btn small pink" id="export-btn" onclick="exportToDrive()">📤 구글 드라이브로 내보내기</button>
         <button class="btn small secondary" id="drive-view-btn" onclick="openDriveFolder()">📁 구글 드라이브 보기</button>
+        <button class="logout-btn" onclick="logout()">로그아웃</button>
       </div>
     </div>
     <div class="slots-grid" id="slots-grid"></div>
