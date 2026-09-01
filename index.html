@@ -340,10 +340,22 @@ if(urlBoardCode){
 }
 
 /* ===================== 로그인 처리 ===================== */
+['s-grade','s-class','s-number','s-name','s-boardcode'].forEach(id=>{
+  document.getElementById(id).addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); studentLogin(); }
+  });
+});
+['t-id','t-pw'].forEach(id=>{
+  document.getElementById(id).addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); teacherLogin(); }
+  });
+});
+
 async function teacherLogin(){
   const id = document.getElementById('t-id').value.trim();
   const pw = document.getElementById('t-pw').value;
   const errEl = document.getElementById('teacher-err');
+  if(!id || !pw){ errEl.textContent = '아이디와 비밀번호를 모두 입력해주세요.'; return; }
   if(id === CONFIG.TEACHER_ID && pw === CONFIG.TEACHER_PW){
     currentUser = { role:'teacher', name:'선생님' };
     sessionStorage.setItem('cb_user', JSON.stringify(currentUser));
